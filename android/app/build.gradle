@@ -7,8 +7,8 @@ android {
         applicationId "com.kenngenor.fastlanelife"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode((project.findProperty('versionCode') ?: '1') as Integer)
+        versionName((project.findProperty('versionName') ?: '0.1.0') as String)
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +16,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        // Release key: set ANDROID_KEYSTORE_FILE / _PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD
+        // (e.g. from CI secrets) for a private key. Otherwise the bundled sideload key is used,
+        // which keeps APK updates installable over each other but is NOT secret.
+        release {
+            def ks = System.getenv('ANDROID_KEYSTORE_FILE')
+            storeFile file(ks ?: 'sideload.keystore')
+            storePassword ks ? System.getenv('ANDROID_KEYSTORE_PASSWORD') : 'fastlanelife'
+            keyAlias ks ? System.getenv('ANDROID_KEY_ALIAS') : 'fastlanelife'
+            keyPassword ks ? System.getenv('ANDROID_KEY_PASSWORD') : 'fastlanelife'
+        }
+    }
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

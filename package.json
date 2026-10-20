@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "cap:sync": "npm run build && cap sync",
     "android": "npm run cap:sync && cap open android",
-    "ios": "npm run cap:sync && cap open ios"
+    "ios": "npm run cap:sync && cap open ios",
+    "desktop": "npm run build && electron .",
+    "dist:win": "npm run build && electron-builder --win --publish never"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
@@ -21,8 +23,53 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.3",
+    "electron": "^44.9.2",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.9.3",
     "vite": "^8.3.4",
     "vitest": "^5.0.5"
+  },
+  "description": "Fast Lane Life \u2013 a life-sim board game for 1\u20134 players.",
+  "author": "KenngeNOR",
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "com.kenngenor.fastlanelife",
+    "productName": "Fast Lane Life",
+    "artifactName": "FastLaneLife-${version}-${os}-${arch}-${target}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "assets/icon.png",
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "FastLaneLife-${version}-Setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "FastLaneLife-${version}-Portable.${ext}"
+    }
   }
 }

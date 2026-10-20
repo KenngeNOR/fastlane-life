@@ -1,0 +1,91 @@
+name: Release
+
+# Push a tag like v0.2.0 (or run manually with a version) to build the
+# Android APK, the Windows installer/portable .exe and a web zip, and
+# publish them as a GitHub Release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version, e.g. 0.2.0'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  VERSION: ${{ github.event.inputs.version || github.ref_name }}
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npx cap sync android
+      - name: Build signed APK
+        working-directory: android
+        shell: bash
+        run: ./gradlew assembleRelease --no-daemon -PversionName="${VERSION#v}" -PversionCode=${{ github.run_number }}
+      - shell: bash
+        run: |
+          mkdir out
+          cp android/app/build/outputs/apk/release/app-release.apk "out/FastLaneLife-${VERSION#v}-Android.apk"
+          (cd dist && zip -qr "../out/FastLaneLife-${VERSION#v}-Web.zip" .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: out/*
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - shell: bash
+        run: npm version --no-git-tag-version --allow-same-version "${VERSION#v}"
+      - run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: release/*.exe
+
+  release:
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: files
+          merge-multiple: true
+      - shell: bash
+        run: echo "TAG=v${VERSION#v}" >> "$GITHUB_ENV"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: Fast Lane Life ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          files: files/*
+          body: |
+            **Android:** download `FastLaneLife-*-Android.apk` on your phone and open it (allow "install unknown apps").
+            **Windows:** `FastLaneLife-*-Setup.exe` installs the game; `FastLaneLife-*-Portable.exe` runs without installing.
+            Windows SmartScreen may warn because the app is not code-signed: click *More info → Run anyway*.
+            **iPhone / any browser:** unzip `FastLaneLife-*-Web.zip` onto any web host, or use the GitHub Pages version.
+
+            All versions can play together online using invite codes.

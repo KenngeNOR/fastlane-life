@@ -5,6 +5,19 @@ shop and relax your way to wealth, happiness, education and career goals. Origin
 names and art; English UI. Runs in any browser and as a native app on Android and iPhone
 (via [Capacitor](https://capacitorjs.com)).
 
+## Download
+
+Grab the latest build from **[Releases](https://github.com/KenngeNOR/fastlane-life/releases)**:
+
+| File | For |
+|---|---|
+| `FastLaneLife-x.y.z-Android.apk` | Android phones — open it and allow "install unknown apps" |
+| `FastLaneLife-x.y.z-Setup.exe` | Windows installer |
+| `FastLaneLife-x.y.z-Portable.exe` | Windows, no install needed |
+| `FastLaneLife-x.y.z-Web.zip` | Any web host (playable on iPhone in Safari) |
+
+The Windows build isn't code-signed, so SmartScreen may warn: *More info → Run anyway*.
+
 ## Play modes
 
 | Mode | How |
@@ -48,11 +61,24 @@ Code layout: `src/game` (pure rules, data, computer opponent), `src/net` (host/c
 sessions over PeerJS), `src/ui` + `src/main.ts` (screens), `android/` and `ios/` (Capacitor
 native projects).
 
-## Phone apps
+## Releases
 
-**Android** — every push builds a debug APK in GitHub Actions (artifact
-`FastLaneLife-android-apk`). Install it on a phone with "install unknown apps" enabled.
-Locally: `npm run android` opens Android Studio (needs Android Studio + JDK 21).
+Push a tag (`git tag v0.2.0 && git push origin v0.2.0`) or run the *Release* workflow
+manually; it builds the APK, the Windows installer and portable .exe, and a web zip, and
+attaches them to a GitHub Release.
+
+**Signing:** the APK is signed with the bundled `android/app/sideload.keystore` so new
+versions install over old ones. That key is public, which is fine for sideloading friends'
+phones but not for the Play Store: for that, create your own keystore and provide it via
+`ANDROID_KEYSTORE_FILE`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and
+`ANDROID_KEY_PASSWORD`.
+
+## Apps
+
+**Windows** — Electron wrapper in `electron/`. `npm run desktop` runs it, `npm run dist:win`
+builds the installer (on Windows).
+
+**Android** — `npm run android` opens Android Studio (needs Android Studio + JDK 21).
 
 **iPhone** — `npm run ios` opens the Xcode project (needs a Mac with Xcode; a free Apple ID
 can install on your own phone, App Store/TestFlight needs a paid developer account).
