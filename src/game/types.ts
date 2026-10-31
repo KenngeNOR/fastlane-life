@@ -8,6 +8,7 @@ export interface Goals {
 }
 
 export type Controller = 'human' | 'bot';
+export type Difficulty = 'easy' | 'normal' | 'hard';
 
 export interface Player {
   id: string;
@@ -67,6 +68,7 @@ export interface WeekendReport {
 
 export interface GameState {
   version: 1;
+  difficulty: Difficulty;
   phase: 'playing' | 'over';
   week: number;
   current: number;

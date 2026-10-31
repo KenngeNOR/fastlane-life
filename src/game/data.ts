@@ -138,7 +138,10 @@ export const JOBS: JobDef[] = [
 
 export const JOB_BY_ID = Object.fromEntries(JOBS.map((j) => [j.id, j])) as Record<string, JobDef>;
 
-export type ApplianceId = 'fridge' | 'tv' | 'stereo' | 'computer';
+export type ApplianceId =
+  | 'fridge' | 'tv' | 'stereo' | 'computer' | 'washer' | 'freezer'
+  | 'bike' | 'coffee' | 'solar' | 'console' | 'bookshelf'
+  | 'dishwasher' | 'treadmill' | 'aircon';
 
 export interface ApplianceDef {
   id: ApplianceId;
@@ -157,6 +160,16 @@ export const APPLIANCES: Record<ApplianceId, ApplianceDef> = {
   tv: { id: 'tv', name: 'Television', icon: '📺', price: 350, happiness: 4, relaxBonus: 2, note: 'Relaxing at home is more fun.' },
   stereo: { id: 'stereo', name: 'Stereo', icon: '📻', price: 250, happiness: 3, relaxBonus: 1, note: 'Music makes home nicer.' },
   computer: { id: 'computer', name: 'Computer', icon: '💻', price: 900, happiness: 3, relaxBonus: 1, note: 'Study at home while enrolled.' },
+  washer: { id: 'washer', name: 'Washing Machine', icon: '🫧', price: 480, happiness: 3, relaxBonus: 0, note: 'Clothes wear out half as fast.' },
+  freezer: { id: 'freezer', name: 'Freezer', icon: '❄️', price: 370, happiness: 1, relaxBonus: 0, note: 'Store 4 extra weeks of food.' },
+  bike: { id: 'bike', name: 'Electric Bicycle', icon: '🚲', price: 650, happiness: 2, relaxBonus: 0, note: 'Travel across town in half the time.' },
+  coffee: { id: 'coffee', name: 'Coffee Machine', icon: '☕', price: 220, happiness: 2, relaxBonus: 0, note: 'Gain 3 extra usable hours each week.' },
+  solar: { id: 'solar', name: 'Solar Panels', icon: '☀️', price: 780, happiness: 2, relaxBonus: 0, note: 'Earn $20 in energy credits each week while housed.' },
+  console: { id: 'console', name: 'Game Console', icon: '🎮', price: 550, happiness: 4, relaxBonus: 4, note: 'Big happiness boost when relaxing at home.' },
+  bookshelf: { id: 'bookshelf', name: 'Bookshelf', icon: '📚', price: 260, happiness: 2, relaxBonus: 0, note: 'Study at home without a computer (once a week).' },
+  dishwasher: { id: 'dishwasher', name: 'Dishwasher', icon: '🍽️', price: 430, happiness: 2, relaxBonus: 2, note: 'Less household work; more relaxing evenings.' },
+  treadmill: { id: 'treadmill', name: 'Home Gym', icon: '🏋️', price: 700, happiness: 3, relaxBonus: 3, note: 'Relax at home for a stronger happiness boost.' },
+  aircon: { id: 'aircon', name: 'Air Conditioning', icon: '🌬️', price: 580, happiness: 2, relaxBonus: 2, note: 'A comfortable home improves relaxation.' },
 };
 
 export interface ShopItem {
@@ -172,11 +185,17 @@ export const SHOP: Partial<Record<LocationId, ShopItem[]>> = {
   market: [
     { id: 'groceries', name: 'Groceries (1 week)', price: 25, note: 'Eaten at the weekend.' },
     { id: 'treat', name: 'Gourmet Treat', price: 40, note: '+3 happiness.' },
+    { id: 'fresh-meal', name: 'Fresh Cooked Dinner', price: 30, note: 'Counts as this week’s meal and adds 2 happiness.' },
+    { id: 'family-pack', name: 'Family Grocery Pack (3 weeks)', price: 65, note: 'Stock up on 3 weeks of groceries. Needs enough storage.' },
   ],
   bargain: [
     { id: 'canned', name: 'Canned Food (1 week)', price: 20, note: 'Eaten at the weekend.' },
     { id: 'casual', name: 'Casual Clothes', price: 60, note: 'Lasts 12 weeks.' },
     { id: 'lottery', name: 'Lottery Ticket', price: 10, note: 'Drawn at the weekend. 1-in-60 to win $1,000.' },
+    { id: 'laundry', name: 'Laundry Service', price: 28, note: 'Extends usable clothing by 3 weeks (up to 24).' },
+  ],
+  park: [
+    { id: 'festival', name: 'Weekend Festival', price: 60, note: 'A fun 6-hour outing: +8 happiness.' },
   ],
   threads: [
     { id: 'casual-nice', name: 'Casual Clothes', price: 90, note: 'Lasts 12 weeks. +1 happiness.' },

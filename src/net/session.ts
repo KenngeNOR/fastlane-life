@@ -9,7 +9,7 @@
 import Peer, { type DataConnection } from 'peerjs';
 import { playBotWeek, botStep } from '../game/bot';
 import { GOAL_PRESETS, applyAction, createGame, currentPlayer, setConnected, setController } from '../game/engine';
-import type { Action, Controller, GameState, Goals } from '../game/types';
+import type { Action, Controller, Difficulty, GameState, Goals } from '../game/types';
 
 export const MAX_PLAYERS = 4;
 const PEER_PREFIX = 'fastlanelife-v1-';
@@ -45,6 +45,7 @@ export interface Lobby {
   players: LobbyPlayer[];
   preset: keyof typeof GOAL_PRESETS;
   goals: Goals;
+  difficulty: Difficulty;
 }
 
 type ToHost = { t: 'join'; clientId: string; name: string } | { t: 'action'; playerId: string; action: Action };
@@ -61,7 +62,7 @@ export abstract class Session {
   /** Owner id of this device: 'host' on the hosting device, else the client id. */
   abstract readonly me: string;
   code: string | null = null;
-  lobby: Lobby = { players: [], preset: 'standard', goals: GOAL_PRESETS.standard };
+  lobby: Lobby = { players: [], preset: 'standard', goals: GOAL_PRESETS.standard, difficulty: 'normal' };
   state: GameState | null = null;
   status = '';
   private listeners = new Set<() => void>();
@@ -218,10 +219,16 @@ export class HostSession extends Session {
     this.changed();
   }
 
+  setDifficulty(difficulty: Difficulty) {
+    if (this.state || !(['easy', 'normal', 'hard'] as Difficulty[]).includes(difficulty)) return;
+    this.lobby.difficulty = difficulty;
+    this.changed();
+  }
+
   start() {
     if (this.state) return;
     const seed = (Math.random() * 2 ** 31) | 0;
-    this.state = createGame(this.lobby.players, this.lobby.goals, seed);
+    this.state = createGame(this.lobby.players, this.lobby.goals, seed, this.lobby.difficulty);
     for (const lp of this.lobby.players) if (!lp.connected) this.state = setConnected(this.state, lp.owner, false);
     this.changed();
   }
