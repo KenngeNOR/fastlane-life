@@ -206,6 +206,7 @@ function spendTime(p: Player, hours: number): string | undefined {
 }
 
 function pay(p: Player, amount: number): string | undefined {
+  if (!Number.isFinite(amount) || amount < 0) return 'Invalid amount.';
   if (p.cash < amount) return `You need ${money(amount)} in cash.`;
   p.cash -= amount;
   return undefined;
@@ -439,7 +440,7 @@ function run(state: GameState, p: Player, a: Action): string | undefined {
       const e = at('bank');
       if (e) return e;
       const amount = Math.floor(a.amount);
-      if (!(amount > 0)) return 'Enter an amount.';
+      if (!Number.isSafeInteger(amount) || amount <= 0) return 'Enter a valid amount.';
       if (a.type === 'deposit') {
         if (amount > p.cash) return "You don't have that much cash.";
         p.cash -= amount;
@@ -457,7 +458,7 @@ function run(state: GameState, p: Player, a: Action): string | undefined {
       const e = at('bank');
       if (e) return e;
       const n = Math.floor(a.count);
-      if (!(n > 0)) return 'Enter a number of shares.';
+      if (!Number.isSafeInteger(n) || n <= 0) return 'Enter a valid number of shares.';
       const value = Math.round(n * state.stockPrice);
       if (a.type === 'buyShares') {
         const err = pay(p, value);
