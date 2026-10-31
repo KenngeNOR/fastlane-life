@@ -2,7 +2,7 @@
 // it needs to be somewhere else first, it returns a move there.
 
 import { APPLIANCES, COURSES, HOUSING, JOBS, JOB_BY_ID, SHIFT_HOURS, CLASS_HOURS, type LocationId } from './data';
-import { applyAction, courseBlockers, currentPlayer, homeLocation, jobBlockers, scores, walkHours } from './engine';
+import { RENT_CYCLE_WEEKS, applyAction, courseBlockers, currentPlayer, fourWeekRent, homeLocation, jobBlockers, scores, travelHours } from './engine';
 import type { Action, GameState } from './types';
 
 export function botAction(state: GameState): Action {
@@ -13,7 +13,7 @@ export function botAction(state: GameState): Action {
 
   /** Do `action` at `loc`, walking there first; skip if there's no time. */
   const goDo = (loc: LocationId, action: Action, hoursNeeded = 0): Action | null => {
-    if (walkHours(p.location, loc) + hoursNeeded > p.hoursLeft) return null;
+    if (travelHours(p, p.location, loc) + hoursNeeded > p.hoursLeft) return null;
     return p.location === loc ? action : { type: 'move', to: loc };
   };
   const pick = (...options: (Action | null | false | undefined | "")[]): Action => {
@@ -33,10 +33,11 @@ export function botAction(state: GameState): Action {
   return pick(
     // Survival first.
     !p.ateThisWeek && p.food === 0 && p.cash >= 15 && goDo('burger', { type: 'buy', itemId: 'meal' }),
-    !p.housing && p.cash >= HOUSING.lowcost.weeklyRent * 2 && goDo('rent', { type: 'rent', housing: 'lowcost' }),
+    !p.housing && p.cash >= fourWeekRent(state, 'lowcost') && goDo('rent', { type: 'rent', housing: 'lowcost' }),
     p.rentDebt > 0 && p.cash >= p.rentDebt + 30 && goDo('rent', { type: 'payRent', weeks: 0 }),
-    p.housing && p.rentPrepaidWeeks === 0 && p.cash >= HOUSING[p.housing].weeklyRent * 2 + reserve &&
-      goDo('rent', { type: 'payRent', weeks: 2 }),
+    p.housing && p.rentPrepaidWeeks <= 1 && p.rentDebt === 0 &&
+      p.cash > fourWeekRent(state, p.housing) + reserve * 3 &&
+      goDo('rent', { type: 'payRent', weeks: RENT_CYCLE_WEEKS }),
     (p.clothes === 0 || p.clothesWeeks <= 1) && p.cash >= 60 && goDo('bargain', { type: 'buy', itemId: 'casual' }),
 
     // Career moves.
@@ -59,7 +60,7 @@ export function botAction(state: GameState): Action {
         ? goDo('gadget', { type: 'buyAppliance', applianceId: appliance })
         : goDo('bank', { type: 'withdraw', amount: APPLIANCES[appliance].price - p.cash + 20 })),
     s.happiness < goals.happiness && p.housing === 'lowcost' && p.savings > 2500 && p.rentDebt === 0 &&
-      (p.cash >= HOUSING.luxury.weeklyRent * 2
+      (p.cash >= fourWeekRent(state, 'luxury')
         ? goDo('rent', { type: 'rent', housing: 'luxury' })
         : goDo('bank', { type: 'withdraw', amount: HOUSING.luxury.weeklyRent * 2 })),
 
@@ -80,7 +81,7 @@ function needsBetterClothes(current: number, level: number) {
 }
 
 function buyableAppliance(p: GameState['players'][number]) {
-  return (['tv', 'stereo', 'fridge', 'computer'] as const).find(
+  return (['tv', 'stereo', 'fridge', 'computer', 'washer', 'bike', 'console', 'coffee', 'freezer', 'solar', 'bookshelf'] as const).find(
     (id) => !p.appliances.includes(id) && p.cash + p.savings > APPLIANCES[id].price + 800,
   );
 }

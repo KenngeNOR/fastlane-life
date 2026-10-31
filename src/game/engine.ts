@@ -7,8 +7,6 @@ import {
   CLASS_HOURS,
   CLOTHES_WEEKS,
   COURSE_BY_ID,
-  EVICTION_DEBT_WEEKS,
-  HOURS_PER_WEEK,
   HOUSING,
   JOB_BY_ID,
   LESSONS_PER_DEGREE,
@@ -29,7 +27,7 @@ import {
   type JobDef,
   type LocationId,
 } from './data';
-import type { Action, ActionResult, GameState, Goals, Player, PlayerSetup } from './types';
+import type { Action, ActionResult, Difficulty, GameState, Goals, Player, PlayerSetup } from './types';
 
 // ---------------------------------------------------------------- random
 
@@ -49,7 +47,24 @@ export const GOAL_PRESETS: Record<string, Goals> = {
   long: { wealth: 80, happiness: 75, education: 75, career: 80 },
 };
 
-export function createGame(setups: PlayerSetup[], goals: Goals, seed: number): GameState {
+export const DIFFICULTY_RULES: Record<Difficulty, { label: string; startingCash: number; weeklyHours: number; wageFactor: number; rentFactor: number; hungerPenalty: number }> = {
+  easy: { label: 'Relaxed', startingCash: 350, weeklyHours: 66, wageFactor: 1.2, rentFactor: 0.8, hungerPenalty: 5 },
+  normal: { label: 'Classic', startingCash: 200, weeklyHours: 60, wageFactor: 1, rentFactor: 1, hungerPenalty: 8 },
+  hard: { label: 'Survival', startingCash: 125, weeklyHours: 54, wageFactor: 0.85, rentFactor: 1.25, hungerPenalty: 12 },
+};
+
+/** Rent is a single monthly (four-week) bill, not four separate weekly bills. */
+export const RENT_CYCLE_WEEKS = 4;
+export function fourWeekRent(state: GameState, home: keyof typeof HOUSING): number {
+  return Math.round(HOUSING[home].weeklyRent * RENT_CYCLE_WEEKS * DIFFICULTY_RULES[state.difficulty].rentFactor);
+}
+
+export function weeklyHours(state: GameState, p?: Player): number {
+  return DIFFICULTY_RULES[state.difficulty].weeklyHours + (p?.appliances.includes('coffee') ? 3 : 0);
+}
+
+export function createGame(setups: PlayerSetup[], goals: Goals, seed: number, difficulty: Difficulty = 'normal'): GameState {
+  if (!DIFFICULTY_RULES[difficulty]) throw new Error('Unknown difficulty');
   if (setups.length < 1 || setups.length > 4) throw new Error('A game needs 1–4 players');
   const players: Player[] = setups.map((s, i) => ({
     id: `p${i + 1}`,
@@ -60,14 +75,14 @@ export function createGame(setups: PlayerSetup[], goals: Goals, seed: number): G
     owner: s.owner,
     connected: true,
     location: 'lowcost',
-    hoursLeft: HOURS_PER_WEEK,
+    hoursLeft: DIFFICULTY_RULES[difficulty].weeklyHours,
     sickHours: 0,
-    cash: 200,
+    cash: DIFFICULTY_RULES[difficulty].startingCash,
     savings: 0,
     shares: 0,
     happiness: 30,
     housing: 'lowcost',
-    rentPrepaidWeeks: 2,
+    rentPrepaidWeeks: RENT_CYCLE_WEEKS,
     rentDebt: 0,
     food: 0,
     ateThisWeek: false,
@@ -85,6 +100,7 @@ export function createGame(setups: PlayerSetup[], goals: Goals, seed: number): G
   }));
   const state: GameState = {
     version: 1,
+    difficulty,
     phase: 'playing',
     week: 1,
     current: 0,
@@ -145,7 +161,13 @@ export function homeLocation(p: Player): LocationId {
 }
 
 export function maxFood(p: Player): number {
-  return p.appliances.includes('fridge') ? MAX_FOOD_WITH_FRIDGE : MAX_FOOD_NO_FRIDGE;
+  return (p.appliances.includes('fridge') ? MAX_FOOD_WITH_FRIDGE : MAX_FOOD_NO_FRIDGE) + (p.appliances.includes('freezer') ? 4 : 0);
+}
+
+/** Equipment can reduce movement time without changing the town layout. */
+export function travelHours(p: Player, from: LocationId, to: LocationId): number {
+  const steps = walkHours(from, to);
+  return p.appliances.includes('bike') ? Math.ceil(steps / 2) : steps;
 }
 
 /** Reasons the player can't take this job, or an empty list if they can. */
@@ -184,13 +206,14 @@ function spendTime(p: Player, hours: number): string | undefined {
 }
 
 function pay(p: Player, amount: number): string | undefined {
+  if (!Number.isFinite(amount) || amount < 0) return 'Invalid amount.';
   if (p.cash < amount) return `You need ${money(amount)} in cash.`;
   p.cash -= amount;
   return undefined;
 }
 
-function startWeek(p: Player) {
-  p.hoursLeft = Math.max(0, HOURS_PER_WEEK - p.sickHours);
+function startWeek(state: GameState, p: Player) {
+  p.hoursLeft = Math.max(0, weeklyHours(state, p) - p.sickHours);
   p.sickHours = 0;
   p.location = homeLocation(p);
   p.ateThisWeek = false;
@@ -202,6 +225,7 @@ function startWeek(p: Player) {
 
 export function applyAction(input: GameState, playerId: string, action: Action): ActionResult {
   if (input.phase !== 'playing') return { state: input, error: 'The game is over.' };
+  if (!action || typeof action !== 'object' || typeof action.type !== 'string') return { state: input, error: 'Invalid action.' };
   if (currentPlayer(input).id !== playerId) return { state: input, error: "It's not your turn." };
   const state: GameState = structuredClone(input);
   const p = currentPlayer(state);
@@ -219,7 +243,7 @@ function run(state: GameState, p: Player, a: Action): string | undefined {
     case 'move': {
       if (!LOCATION_BY_ID[a.to]) return 'Unknown place.';
       if (a.to === here) return undefined;
-      const err = spendTime(p, walkHours(here, a.to));
+      const err = spendTime(p, travelHours(p, here, a.to));
       if (err) return err;
       p.location = a.to;
       return undefined;
@@ -244,7 +268,7 @@ function run(state: GameState, p: Player, a: Action): string | undefined {
       if (hours < 1) return 'Not enough time left this week.';
       p.hoursLeft -= hours;
       p.hoursWorked += hours;
-      let earned = Math.round(job.wage * hours);
+      let earned = Math.round(job.wage * hours * DIFFICULTY_RULES[state.difficulty].wageFactor);
       if (p.rentDebt > 0) {
         const garnish = Math.min(p.rentDebt, Math.ceil(earned / 2));
         p.rentDebt -= garnish;
@@ -298,7 +322,7 @@ function run(state: GameState, p: Player, a: Action): string | undefined {
         if (e) return e;
       } else {
         if (here !== p.housing) return 'You can only study at home.';
-        if (!p.appliances.includes('computer')) return 'You need a computer to study at home.';
+        if (!p.appliances.includes('computer') && !p.appliances.includes('bookshelf')) return 'You need a computer or bookshelf to study at home.';
         if (p.studiedAtHomeThisWeek) return 'You already studied at home this week.';
         p.studiedAtHomeThisWeek = true;
       }
@@ -341,9 +365,10 @@ function run(state: GameState, p: Player, a: Action): string | undefined {
       const clothesLevel: Record<string, ClothesLevel> = { casual: 1, 'casual-nice': 1, business: 2, executive: 3 };
       const level = clothesLevel[item.id];
       if (level !== undefined && p.clothesWeeks > 0 && p.clothes > level) return 'You already own better clothes.';
-      if ((item.id === 'groceries' || item.id === 'canned') && p.food >= maxFood(p)) {
-        return p.appliances.includes('fridge') ? 'Your fridge is full.' : 'Without a fridge you can only store one week of food.';
-      }
+      const incomingFood = item.id === 'family-pack' ? 3 : item.id === 'groceries' || item.id === 'canned' ? 1 : 0;
+      if (incomingFood && p.food + incomingFood > maxFood(p)) return 'Not enough food storage. Buy a fridge or freezer.';
+      if (item.id === 'laundry' && (p.clothes === 0 || p.clothesWeeks === 0)) return 'You need usable clothes for a laundry service.';
+      if (item.id === 'festival' && p.hoursLeft < 6) return 'The festival takes 6 hours.';
       const err = pay(p, item.price);
       if (err) return err;
       if (level !== undefined) {
@@ -361,6 +386,20 @@ function run(state: GameState, p: Player, a: Action): string | undefined {
         case 'groceries':
         case 'canned':
           p.food++;
+          break;
+        case 'family-pack':
+          p.food += 3;
+          break;
+        case 'fresh-meal':
+          if (!p.ateThisWeek) addHappiness(p, 2);
+          p.ateThisWeek = true;
+          break;
+        case 'laundry':
+          p.clothesWeeks = Math.min(24, p.clothesWeeks + 3);
+          break;
+        case 'festival':
+          p.hoursLeft -= 6;
+          addHappiness(p, 8);
           break;
         case 'treat':
           addHappiness(p, 3);
@@ -401,7 +440,7 @@ function run(state: GameState, p: Player, a: Action): string | undefined {
       const e = at('bank');
       if (e) return e;
       const amount = Math.floor(a.amount);
-      if (!(amount > 0)) return 'Enter an amount.';
+      if (!Number.isSafeInteger(amount) || amount <= 0) return 'Enter a valid amount.';
       if (a.type === 'deposit') {
         if (amount > p.cash) return "You don't have that much cash.";
         p.cash -= amount;
@@ -419,7 +458,7 @@ function run(state: GameState, p: Player, a: Action): string | undefined {
       const e = at('bank');
       if (e) return e;
       const n = Math.floor(a.count);
-      if (!(n > 0)) return 'Enter a number of shares.';
+      if (!Number.isSafeInteger(n) || n <= 0) return 'Enter a valid number of shares.';
       const value = Math.round(n * state.stockPrice);
       if (a.type === 'buyShares') {
         const err = pay(p, value);
@@ -440,10 +479,10 @@ function run(state: GameState, p: Player, a: Action): string | undefined {
       if (!h) return 'Unknown apartment.';
       if (p.housing === h.id) return 'You already live there.';
       if (p.rentDebt > 0) return `Pay your ${money(p.rentDebt)} rent debt first.`;
-      const err = pay(p, h.weeklyRent * 2);
+      const err = pay(p, fourWeekRent(state, h.id));
       if (err) return err;
       p.housing = h.id;
-      p.rentPrepaidWeeks = 2;
+      p.rentPrepaidWeeks = RENT_CYCLE_WEEKS;
       if (h.id === 'luxury') addHappiness(p, 6);
       log(state, p.id, `${p.name} moved into ${h.name}.`);
       return undefined;
@@ -453,14 +492,14 @@ function run(state: GameState, p: Player, a: Action): string | undefined {
       const e = at('rent');
       if (e) return e;
       if (!p.housing) return "You don't rent anywhere.";
-      const weeks = Math.floor(a.weeks);
-      const cost = p.rentDebt + Math.max(0, weeks) * HOUSING[p.housing].weeklyRent;
-      if (cost <= 0) return 'Nothing to pay.';
-      if (p.rentPrepaidWeeks + weeks > 8) return 'You can prepay at most 8 weeks.';
+      if (![0, 4, 8].includes(a.weeks)) return 'Rent may only be prepaid in four-week blocks.';
+      if (a.weeks === 0 && p.rentDebt === 0) return 'No outstanding rent.';
+      if (p.rentPrepaidWeeks + a.weeks > 12) return 'You can prepay at most 12 weeks.';
+      const cost = p.rentDebt + (a.weeks / RENT_CYCLE_WEEKS) * fourWeekRent(state, p.housing);
       const err = pay(p, cost);
       if (err) return err;
       p.rentDebt = 0;
-      p.rentPrepaidWeeks += Math.max(0, weeks);
+      p.rentPrepaidWeeks += a.weeks;
       return undefined;
     }
   }
@@ -484,27 +523,38 @@ function endTurn(state: GameState, p: Player) {
     p.food--;
     lines.push('🥫 You ate from your food at home.');
   } else {
-    addHappiness(p, -8);
+    const penalty = DIFFICULTY_RULES[state.difficulty].hungerPenalty;
+    addHappiness(p, -penalty);
     p.sickHours = 10;
-    lines.push('😵 You went hungry! −8 happiness and you start next week 10 hours behind.');
+    lines.push(`😵 You went hungry! −${penalty} happiness and you start next week 10 hours behind.`);
   }
 
-  // Rent
+  // Rent is assessed ONLY at the end of each four-week billing cycle.
   if (p.housing) {
-    const h = HOUSING[p.housing];
-    if (p.rentPrepaidWeeks > 0) {
-      p.rentPrepaidWeeks--;
-    } else {
-      p.rentDebt += h.weeklyRent;
-      addHappiness(p, -2);
-      lines.push(`🗝️ Rent is overdue. You owe ${money(p.rentDebt)}.`);
-      if (p.rentDebt >= h.weeklyRent * EVICTION_DEBT_WEEKS) {
-        p.housing = null;
-        p.rentDebt = 0;
-        addHappiness(p, -10);
-        lines.push('🚪 You were evicted! Visit the Rent Office to find a new home.');
-        log(state, p.id, `${p.name} was evicted.`);
+    const due = fourWeekRent(state, p.housing);
+    p.rentPrepaidWeeks = Math.max(0, p.rentPrepaidWeeks - 1);
+    if (p.rentPrepaidWeeks === 0) {
+      p.rentPrepaidWeeks = RENT_CYCLE_WEEKS;
+      if (p.cash + p.savings >= due) {
+        const fromCash = Math.min(p.cash, due);
+        p.cash -= fromCash;
+        p.savings -= due - fromCash;
+        lines.push(`🗝️ Four-week rent paid: ${money(due)}. Next bill in 4 weeks.`);
+      } else {
+        p.rentDebt += due;
+        addHappiness(p, -2);
+        lines.push(`🗝️ Four-week rent bill unpaid: ${money(due)}. Total owed: ${money(p.rentDebt)}.`);
+        if (p.rentDebt >= due * 2) {
+          p.housing = null;
+          p.rentPrepaidWeeks = 0;
+          p.rentDebt = 0;
+          addHappiness(p, -10);
+          lines.push('🚪 You were evicted after missing multiple rent payments.');
+          log(state, p.id, `${p.name} was evicted.`);
+        }
       }
+    } else if (p.rentPrepaidWeeks === 1) {
+      lines.push(`🗓️ Next four-week rent payment (${money(due)}) is due after next week.`);
     }
   } else {
     addHappiness(p, -4);
@@ -512,7 +562,7 @@ function endTurn(state: GameState, p: Player) {
   }
 
   // Clothes
-  if (p.clothesWeeks > 0) {
+  if (p.clothesWeeks > 0 && (!p.appliances.includes('washer') || state.week % 2 === 0)) {
     p.clothesWeeks--;
     if (p.clothesWeeks === 0 && p.clothes > 0) {
       p.clothes = 0;
@@ -527,6 +577,12 @@ function endTurn(state: GameState, p: Player) {
   if (interest > 0) {
     p.savings += interest;
     lines.push(`🏦 Your savings earned ${money(interest)} interest.`);
+  }
+
+  // Owned upgrades can generate recurring rewards rather than just purchase points.
+  if (p.housing && p.appliances.includes('solar')) {
+    p.cash += 20;
+    lines.push('☀️ Solar panels earned $20 in energy credits.');
   }
 
   // Lottery
@@ -596,7 +652,7 @@ function endTurn(state: GameState, p: Player) {
     state.stockPrice = Math.max(5, Math.round(state.stockPrice * (1 + change) * 100) / 100);
     log(state, null, `Week ${state.week} begins. Stock price: $${state.stockPrice.toFixed(2)}.`);
   }
-  startWeek(currentPlayer(state));
+  startWeek(state, currentPlayer(state));
 }
 
 /** Hands a player to the computer (e.g. their device disconnected) or back to a device. */

@@ -18,6 +18,18 @@ Grab the latest build from **[Releases](https://github.com/KenngeNOR/fastlane-li
 
 The Windows build isn't code-signed, so SmartScreen may warn: *More info → Run anyway*.
 
+## New in the city-life overhaul
+
+**Difficulty:** Relaxed, Classic and Survival independently change starting money, available hours, wages, four-week rent, and hunger penalties. Quick/Standard/Long still control the winning goals.
+
+**Rent:** charged once every four weeks. The starting apartment is paid for until the end of week four. Rent is automatically collected from cash and then savings, or players can prepay in four-week blocks. After two unpaid monthly payments, eviction is possible.
+
+**Upgrades:** washing machines extend clothing durability; freezers extend food storage; bikes cut travel hours; coffee machines boost weekly time; solar panels earn weekly credits; bookshelves let players study at home. More entertainment and home comfort goods reward relaxation.
+
+**Lifestyle:** fresh dinners, grocery packs, laundry services and festivals add more spending decisions.
+
+**Visual design:** refreshed dashboard, city skyline, clearer shop offerings, responsive map and rent alerts.
+
 ## Play modes
 
 | Mode | How |

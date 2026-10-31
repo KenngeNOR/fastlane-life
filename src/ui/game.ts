@@ -5,7 +5,6 @@ import {
   CLOTHES_NAMES,
   COURSES,
   COURSE_BY_ID,
-  HOURS_PER_WEEK,
   HOUSING,
   JOBS,
   JOB_BY_ID,
@@ -17,7 +16,7 @@ import {
   type ApplianceId,
   type LocationId,
 } from '../game/data';
-import { courseBlockers, currentPlayer, experience, jobBlockers, maxFood, netWorth, scores, walkHours } from '../game/engine';
+import { DIFFICULTY_RULES, courseBlockers, currentPlayer, experience, fourWeekRent, jobBlockers, maxFood, netWorth, scores, travelHours, weeklyHours } from '../game/engine';
 import type { Action, GameState, Player } from '../game/types';
 import { HostSession, type Session } from '../net/session';
 import { act, esc, money } from './html';
@@ -38,12 +37,19 @@ export function renderGame(session: Session, dismissed: Set<string>): string {
   <div class="game ${mine ? 'my-turn' : ''}">
     <header class="topbar">
       <button class="ghost small" ${act('leave')}>☰ Menu</button>
-      <div class="week">Week ${state.week}</div>
+      <div class="brand-lockup"><span class="brand-mark">FL</span><span class="brand-copy">FAST LANE <b>LIFE</b></span></div>
+      <div class="week">WEEK <b>${state.week}</b> <small>· ${DIFFICULTY_RULES[state.difficulty ?? 'normal'].label}</small></div>
       ${session.code ? `<div class="code-chip" title="Invite code">🔗 ${esc(session.code)}</div>` : ''}
       <div class="spacer"></div>
       ${session.status ? `<div class="net-status">${esc(session.status)}</div>` : ''}
       ${mine && state.phase === 'playing' ? `<button class="primary" ${act('do', { type: 'endTurn' })}>End week ▸</button>` : ''}
     </header>
+    <div class="city-status">
+      <span><b>${esc(cur.name)}</b> · ${esc(LOCATION_BY_ID[cur.location].name)}</span>
+      <span>💵 ${money(cur.cash)}</span>
+      <span>🗝️ ${cur.housing ? `Rent in ${cur.rentPrepaidWeeks} week(s)` : 'No home'}</span>
+      <span>🍽️ ${cur.ateThisWeek || cur.food ? 'Food available' : 'Food needed'}</span>
+    </div>
     <div class="layout">
       <section class="board-wrap">${renderBoard(state, mine)}</section>
       <aside class="side">
@@ -63,7 +69,7 @@ function renderBoard(state: GameState, mine: boolean): string {
     const [r, c] = RING_CELLS[i];
     const here = state.players.filter((p) => p.location === loc.id && (p.id === cur.id || state.phase === 'over'));
     const others = state.players.filter((p) => p.id !== cur.id && homeOf(p) === loc.id && state.phase === 'playing');
-    const cost = walkHours(cur.location, loc.id);
+    const cost = travelHours(cur, cur.location, loc.id);
     const isHome = homeOf(cur) === loc.id;
     const job = cur.jobId && JOB_BY_ID[cur.jobId].location === loc.id;
     return `
@@ -81,8 +87,9 @@ function renderBoard(state: GameState, mine: boolean): string {
         </span>
       </button>`;
   }).join('');
-  const pct = Math.max(0, cur.hoursLeft / HOURS_PER_WEEK);
+  const pct = Math.max(0, cur.hoursLeft / weeklyHours(state, cur));
   return `
+    <div class="board-titlebar"><span>CITY MAP</span><span>Tap a destination ${cur.appliances.includes('bike') ? '· Bike bonus active' : ''}</span></div>
     <div class="board">
       ${tiles}
       <div class="center">
@@ -90,6 +97,7 @@ function renderBoard(state: GameState, mine: boolean): string {
           <div class="clock-inner"><b>${cur.hoursLeft}</b><small>hours left</small></div>
         </div>
         <div class="center-info">
+          <span class="center-eyebrow">NOW PLAYING</span>
           <div class="who" style="--c:${cur.color}">${cur.avatar} ${esc(cur.name)}</div>
           <div class="where">at ${esc(LOCATION_BY_ID[cur.location].name)}</div>
           <div class="cash">💵 ${money(cur.cash)}</div>
@@ -119,7 +127,7 @@ function renderTurnPanel(session: Session, state: GameState, cur: Player, mine: 
   const loc = LOCATION_BY_ID[cur.location];
   return `
     <section class="panel turn">
-      <h2>${loc.icon} ${esc(loc.name)}</h2>
+      <h2><span class="location-icon">${loc.icon}</span> ${esc(loc.name)}</h2>
       <p class="muted">${esc(loc.blurb)} Tap another place on the board to walk there.</p>
       <div class="actions">${locationActions(state, cur)}</div>
     </section>`;
@@ -144,10 +152,10 @@ function locationActions(state: GameState, p: Player): string {
   if (p.housing === here) {
     const h = HOUSING[p.housing];
     out.push(button('🛋️ Relax at home', { type: 'relax' }, { note: `6h · +happiness${p.relaxedThisWeek >= 2 ? ' (less fun, you’ve rested a lot)' : ''}` }));
-    if (p.enrolled && p.appliances.includes('computer')) {
+    if (p.enrolled && (p.appliances.includes('computer') || p.appliances.includes('bookshelf'))) {
       out.push(button('💻 Study at home', { type: 'study' }, { note: '6h · +1 lesson (once a week)', disabled: p.studiedAtHomeThisWeek && 'Already studied this week' }));
     }
-    out.push(`<p class="info">🏠 ${esc(h.name)} · ${money(h.weeklyRent)}/week · prepaid ${p.rentPrepaidWeeks} wk${p.rentDebt ? ` · <b class="bad">owes ${money(p.rentDebt)}</b>` : ''} · food stored: ${p.food}/${maxFood(p)}</p>`);
+    out.push(`<p class="info">🏠 ${esc(h.name)} · Four-week rent ${money(fourWeekRent(state, p.housing))} · next bill in ${p.rentPrepaidWeeks} week(s)${p.rentDebt ? ` · <b class="bad">owes ${money(p.rentDebt)}</b>` : ''} · food: ${p.food}/${maxFood(p)}</p>`);
   } else if (here === 'lowcost' || here === 'luxury') {
     out.push(`<p class="info">You don't live here. Rent it at the Rent Office.</p>`);
   }
@@ -156,13 +164,14 @@ function locationActions(state: GameState, p: Player): string {
     case 'rent': {
       for (const h of Object.values(HOUSING)) {
         if (p.housing === h.id) continue;
-        out.push(button(`🗝️ Move into ${h.name}`, { type: 'rent', housing: h.id }, { note: `${money(h.weeklyRent * 2)} now (2 weeks) · ${money(h.weeklyRent)}/week`, disabled: p.rentDebt > 0 && 'Pay your debt first' }));
+        out.push(button(`🗝️ Move into ${h.name}`, { type: 'rent', housing: h.id }, { note: `${money(fourWeekRent(state, h.id))} to move in (4 weeks)`, disabled: p.rentDebt > 0 ? 'Pay your debt first' : p.cash < fourWeekRent(state, h.id) ? 'Not enough cash' : false }));
       }
       if (p.housing) {
-        const w = HOUSING[p.housing].weeklyRent;
-        if (p.rentDebt) out.push(button(`💸 Pay rent debt`, { type: 'payRent', weeks: 0 }, { kind: 'primary', note: money(p.rentDebt) }));
-        out.push(button(`📅 Prepay 1 week`, { type: 'payRent', weeks: 1 }, { note: money(w + p.rentDebt) }));
-        out.push(button(`📅 Prepay 4 weeks`, { type: 'payRent', weeks: 4 }, { note: money(w * 4 + p.rentDebt) }));
+        const bill = fourWeekRent(state, p.housing);
+        out.push(`<p class="info">Rent every 4 weeks · Due in ${p.rentPrepaidWeeks} week(s) · ${money(bill)} per bill</p>`);
+        if (p.rentDebt) out.push(button('Pay rent debt', { type: 'payRent', weeks: 0 }, { kind: 'primary', note: money(p.rentDebt), disabled: p.cash < p.rentDebt ? 'Not enough cash' : false }));
+        out.push(button('Prepay 4 weeks', { type: 'payRent', weeks: 4 }, { note: money(bill + p.rentDebt), disabled: p.rentPrepaidWeeks > 8 ? 'Maximum 12 weeks' : p.cash < bill + p.rentDebt ? 'Not enough cash' : false }));
+        out.push(button('Prepay 8 weeks', { type: 'payRent', weeks: 8 }, { note: money(bill * 2 + p.rentDebt), disabled: p.rentPrepaidWeeks > 4 ? 'Maximum 12 weeks' : p.cash < bill * 2 + p.rentDebt ? 'Not enough cash' : false }));
       }
       break;
     }
@@ -173,11 +182,25 @@ function locationActions(state: GameState, p: Player): string {
         out.push(button(`${a.icon} Sell ${a.name}`, { type: 'pawn', applianceId: id }, { note: `Get ${money(a.price * PAWN_RATE)}` }));
       }
       break;
-    case 'gadget':
-      for (const a of Object.values(APPLIANCES)) {
-        out.push(button(`${a.icon} ${a.name}`, { type: 'buyAppliance', applianceId: a.id as ApplianceId }, { note: `${money(a.price)} · ${a.note}`, disabled: p.appliances.includes(a.id) && 'Owned' }));
+    case 'gadget': {
+      const groups: [string, ApplianceId[]][] = [
+        ['Everyday essentials', ['fridge', 'freezer', 'washer', 'dishwasher']],
+        ['Work & learning', ['computer', 'bookshelf', 'coffee', 'bike', 'solar']],
+        ['Fun & comfort', ['tv', 'stereo', 'console', 'treadmill', 'aircon']],
+      ];
+      for (const [title, ids] of groups) {
+        out.push(`<h3 class="store-heading">${title}</h3>`);
+        for (const id of ids) {
+          const item = APPLIANCES[id];
+          const owned = p.appliances.includes(id);
+          out.push(button(`${item.icon} ${item.name}`, { type: 'buyAppliance', applianceId: id }, {
+            note: `${money(item.price)} · ${item.note}`,
+            disabled: owned ? 'Already owned' : p.cash < item.price ? 'Not enough cash' : false,
+          }));
+        }
       }
       break;
+    }
     case 'college': {
       if (p.enrolled) {
         out.push(button(`📚 Attend class`, { type: 'attend' }, { kind: 'primary', note: `6h · ${COURSE_BY_ID[p.enrolled].name} ${p.lessons}/${LESSONS_PER_DEGREE}` }));
@@ -219,8 +242,15 @@ function locationActions(state: GameState, p: Player): string {
       break;
   }
 
+  if (SHOP[here]?.length) out.push('<h3 class="store-heading">Experiences & supplies</h3>');
   for (const item of SHOP[here] ?? []) {
-    out.push(button(`🛍️ ${item.name}`, { type: 'buy', itemId: item.id }, { note: `${money(item.price)} · ${item.note}` }));
+    out.push(button(`🛍️ ${item.name}`, { type: 'buy', itemId: item.id }, {
+      note: `${money(item.price)} · ${item.note}`,
+      disabled: p.cash < item.price ? 'Not enough cash' :
+        item.id === 'family-pack' && p.food + 3 > maxFood(p) ? 'Not enough storage' :
+        (item.id === 'canned' || item.id === 'groceries') && p.food >= maxFood(p) ? 'Food storage full' :
+        item.id === 'festival' && p.hoursLeft < 6 ? 'Needs 6 hours' : false,
+    }));
   }
 
   if (here !== 'employment') {
@@ -251,6 +281,7 @@ function renderStats(p: Player, state: GameState): string {
     ['📈 Shares', `${p.shares} (${money(p.shares * state.stockPrice)})`],
     ['💼 Job', job ? `${esc(job.title)} · ${money(job.wage)}/h` : '<span class="bad">Unemployed</span>'],
     ['🏠 Home', p.housing ? `${HOUSING[p.housing].name}${p.rentDebt ? ` · <span class="bad">owes ${money(p.rentDebt)}</span>` : ''}` : '<span class="bad">Homeless</span>'],
+    ['🗝️ Next rent', p.housing ? `${money(fourWeekRent(state, p.housing))} in ${p.rentPrepaidWeeks} weeks` : 'Not renting'],
     ['🍽️ Food', `${p.ateThisWeek ? 'Ate this week' : '<span class="warn">Not eaten yet</span>'} · ${p.food} stored`],
     ['👕 Clothes', p.clothes ? `${CLOTHES_NAMES[p.clothes]} (${p.clothesWeeks} wk left)` : '<span class="bad">Rags</span>'],
     ['🎓 Study', p.enrolled ? `${COURSE_BY_ID[p.enrolled].name} ${p.lessons}/${LESSONS_PER_DEGREE}` : 'Not enrolled'],
@@ -259,6 +290,7 @@ function renderStats(p: Player, state: GameState): string {
   ];
   return `
     <section class="panel stats">
+      <div class="panel-kicker">YOUR PROGRESS</div>
       <h2><span class="dot" style="--c:${p.color}"></span>${esc(p.name)}</h2>
       ${goalBars(p, state)}
       <dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
@@ -305,7 +337,8 @@ function renderLog(state: GameState): string {
   const color = (id: string | null) => state.players.find((p) => p.id === id)?.color ?? 'var(--muted)';
   return `
     <section class="panel log">
-      <h2>News</h2>
+      <div class="panel-kicker">THE CITY NEVER SLEEPS</div>
+      <h2>City news</h2>
       <ul>${state.log.slice(-12).reverse().map((e) => `<li style="--c:${color(e.playerId)}"><small>W${e.week}</small> ${esc(e.text)}</li>`).join('')}</ul>
     </section>`;
 }
