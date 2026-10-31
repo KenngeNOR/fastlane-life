@@ -1,5 +1,6 @@
 import './style.css';
-import { GOAL_PRESETS } from './game/engine';
+import { DIFFICULTY_RULES, GOAL_PRESETS } from './game/engine';
+import type { Difficulty } from './game/types';
 import type { Action } from './game/types';
 import { ClientSession, HostSession, MAX_PLAYERS, normalizeCode, type Session } from './net/session';
 import { renderGame } from './ui/game';
@@ -72,9 +73,15 @@ function renderMenu(): string {
   }
   return `
     <main class="menu">
-      <h1 class="logo">Fast Lane <span>Life</span></h1>
-      <p class="tagline">Work, study, shop and party your way to the good life. First to reach every goal wins.</p>
-      <div class="card">
+      <div class="menu-hero">
+        <div class="eyebrow">THE CITY IS YOURS</div>
+        <h1 class="logo">Fast Lane <span>Life</span></h1>
+        <p class="tagline">One city. A thousand choices. Build your dream life from the ground up.</p>
+        <div class="skyline" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="hero-stats"><span>BUILD A CAREER</span><span>LIVE BETTER</span><span>REACH YOUR GOALS</span></div>
+      </div>
+      <div class="card menu-card">
+        <h2>Choose your next adventure</h2>
         ${nameField}
         <button class="primary big" ${act('newLocal')}>🎲 Play on this device</button>
         <small class="muted">Solo against the computer, or pass-and-play with friends.</small>
@@ -104,11 +111,11 @@ function renderHelp(): string {
         <h3>Every weekend</h3>
         <ul>
           <li>You must have eaten: a meal at Burger Barn, or food stored at home. Going hungry hurts.</li>
-          <li>Rent is due. Prepay at the Rent Office; fall 4 weeks behind and you're evicted.</li>
-          <li>Clothes wear out. No clothes, no job.</li>
+          <li>Rent is billed once every four weeks. Your starting home has its first bill at the end of week 4. Prepay in four-week blocks at the Rent Office; two unpaid monthly bills can cause eviction.</li>
+          <li>Clothes wear out. Washing machines extend their life; bicycles speed up travel, freezers store food and coffee machines give extra weekly hours.</li>
           <li>Carrying lots of cash invites muggers — use the bank.</li>
         </ul>
-        <h3>Playing together</h3>
+        <h3>Difficulty</h3><p>Relaxed gives you more resources. Classic is balanced. Survival brings higher rents, less time and tougher consequences. Difficulty is separate from game length.</p><h3>Playing together</h3>
         <ul>
           <li><b>This device</b>: add players and computer opponents, then pass the phone around.</li>
           <li><b>Online</b>: one phone hosts and shows a 6-letter invite code. Others tap <i>Join with a code</i>.
@@ -159,7 +166,16 @@ function renderLobby(s: Session): string {
           <button class="ghost" ${act('addPlayer', 'human')}>+ Player on this device</button>
           <button class="ghost" ${act('addPlayer', 'bot')}>+ Computer</button>
         </div>` : ''}
-        <h2>Game length</h2>
+        <h2>Difficulty <small class="setting-explainer">How hard should city life be?</small></h2>
+        <div class="difficulty-options">
+          ${(Object.keys(DIFFICULTY_RULES) as Difficulty[]).map((d) => {
+            const settings = DIFFICULTY_RULES[d];
+            const selected = (lobby.difficulty ?? 'normal') === d;
+            const subtitle = d === 'easy' ? 'More money & time' : d === 'normal' ? 'Balanced experience' : 'Every hour counts';
+            return `<button class="difficulty-choice ${selected ? 'selected' : ''}" ${host ? act('difficulty', d) : 'disabled'} aria-pressed="${selected}"><b>${settings.label}</b><small>${subtitle}</small></button>`;
+          }).join('')}
+        </div>
+        <h2>Game length <small class="setting-explainer">Choose your goals</small></h2>
         <div class="row presets">
           ${(['quick', 'standard', 'long'] as const)
             .map((k) => `<button class="${lobby.preset === k ? 'primary' : 'ghost'}" ${host ? act('preset', k) : 'disabled'}>${k[0].toUpperCase() + k.slice(1)}</button>`)
@@ -224,6 +240,7 @@ const handlers: Record<string, (arg: any) => void> = {
   },
   removePlayer: (i: number) => (session as HostSession).removePlayer(i),
   preset: (k: keyof typeof GOAL_PRESETS) => (session as HostSession).setPreset(k),
+  difficulty: (d: Difficulty) => (session as HostSession).setDifficulty(d),
   start: () => (session as HostSession).start(),
   share: async () => {
     const code = session?.code;
