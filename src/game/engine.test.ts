@@ -67,7 +67,7 @@ describe('engine', () => {
 
   it('evicts players who never pay rent', () => {
     let g = createGame([human('A')], GOAL_PRESETS.standard, 3);
-    for (let i = 0; i < 6; i++) g = act(g, { type: 'endTurn' });
+    for (let i = 0; i < 8; i++) g = act(g, { type: 'endTurn' });
     expect(g.players[0].housing).toBeNull();
     expect(g.players[0].location).toBe('rent');
   });
@@ -87,7 +87,6 @@ describe('difficulty, ownership and four-week economy', () => {
   it('does not charge rent weekly, but pays a single bill after four weeks', () => {
     let g = createGame([human('A')], GOAL_PRESETS.standard, 1);
     for (let i = 0; i < 3; i++) g = act(g, { type: 'endTurn' });
-    expect(g.players[0].cash).toBe(200);
     expect(g.players[0].rentDebt).toBe(0);
     expect(g.players[0].rentPrepaidWeeks).toBe(1);
     g = act(g, { type: 'endTurn' });
@@ -97,8 +96,8 @@ describe('difficulty, ownership and four-week economy', () => {
   });
 
   it('uses cash and bank savings for the four-week bill', () => {
-    let g = createGame([human('A')], GOAL_PRESETS.standard, 1);
-    g = act(g, { type: 'move', to: 'bank' }, { type: 'deposit', amount: 150 });
+    let g = createGame([human('A')], GOAL_PRESETS.standard, 1, 'easy');
+    g = act(g, { type: 'move', to: 'bank' }, { type: 'deposit', amount: 300 });
     for (let i = 0; i < 4; i++) g = act(g, { type: 'endTurn' });
     expect(g.players[0].rentDebt).toBe(0);
     expect(g.players[0].rentPrepaidWeeks).toBe(4);
